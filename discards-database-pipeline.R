@@ -204,7 +204,7 @@ foss_pivoted_2023 <- foss_pivoted %>%
 
 #---- FOSS prep for stock status merge
 
-foss_pivoted_2023 <- foss_pivoted_2023 %>%
+foss_pivoted <- foss_pivoted %>%
   mutate(
     region_merged = str_to_lower(str_squish(region_merged)),
     tsn_region_unique = paste(region_merged, tsn, sep = "_")
@@ -394,6 +394,17 @@ status_append <- status_append %>%
   group_by(tsn_region_unique) %>%
   slice_max(assessment_year, n = 1, with_ties = F) %>%
   ungroup()
+
+most_recent_year <- max(foss_pivoted$year, na.rm = T)
+
+FOSS_pivot_out <- foss_pivoted %>%
+  left_join(
+    foss_pivoted %>%
+      filter(year == most_recent_year) %>%
+      left_join(status_append, by = "tsn_region_unique") %>%
+      select(tsn_region_unique, year, flimit, fmsy, f_flimit, b_blimit, blimit, bmsy, assessment_year, assessment_id),
+    by = c("tsn_region_unique", "year")
+  )
 
 FOSS_pivot_out2 <- foss_pivoted_2023 %>%
   left_join(status_append, by = "tsn_region_unique")
@@ -632,37 +643,15 @@ status_most_recent_with_region_clean %>%
 
 # z_OLD for now MRIP + region unique identifier -----------------------------------------
 
+str(mrip_raw)
 
-key_collapsed <- MRIP_TSN_key %>%
-  group_by(MRIP_NAME) %>%
-  summarise(
-    TSN = dplyr::first(na.omit(TSN)),     # pick a representative TSN
-    n_tsn = n_distinct(TSN, na.rm = TRUE),    # how many TSNs per MRIP_NAME
-    .groups = "drop"
-  ) %>%
-  mutate(ambiguous_name = n_tsn > 1)
+mrip_clean <- mrip_raw %>%
+  clean_names()
 
-mrip_with_tsn <- mrip_synthesis %>%
-  left_join(key_collapsed %>% select(MRIP_NAME, TSN, ambiguous_name),
-            by = c("common_name" = "MRIP_NAME"))
 
-mrip_with_tsn <- mrip_with_tsn %>%
-  mutate(
-    region_merged = str_to_lower(str_squish(region_merged)),
-    tsn_region_unique = paste(region_merged, TSN, sep = "_")
-  )
+mrip_tsn_joined <- mrip_clean %>%
+  inner_join(tsn_lookup, by = c("common_name" = "name_merged"))
 
-#mrip_with_tsn2 <- mrip_with_tsn %>%
-#  left_join(status_append, by = "tsn_region_unique")
-#
-#mrip_with_tsn2 <- mrip_with_tsn2 %>%
-#  mutate(
-#    discard_proportion = if_else(
-#      released_b2 == 0 | total_harvest_a_b1 == 0,
-#      NA_real_,
-#      released_b2 / (released_b2 + total_harvest_a_b1)
-#    )
-#  )
 
 mrip_with_tsn2 <- mrip_with_tsn %>%
   left_join(status_append, by = "tsn_region_unique") %>%
