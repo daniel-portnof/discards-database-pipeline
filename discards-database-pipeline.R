@@ -406,10 +406,7 @@ FOSS_pivot_out <- foss_pivoted %>%
     by = c("tsn_region_unique", "year")
   )
 
-FOSS_pivot_out2 <- foss_pivoted_2023 %>%
-  left_join(status_append, by = "tsn_region_unique")
-
-readr::write_csv(FOSS_pivot_out2, "FOSS_stock_status_merge.csv")
+readr::write_csv(FOSS_pivot_out2, "FOSS_stock_status_breakdown_2020-2024.csv")
 
 
 # MRIP --------------------------------------------------------------------
