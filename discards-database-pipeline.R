@@ -302,17 +302,17 @@ stock_area_xwalk <- most_recent_stock_status_clean %>%
       str_detect(stock_area_std, "caribbean|puerto rico|st\\. croix|st\\. thomas|st\\. john") ~ "caribbean",
       
       # --- GULF OF MEXICO ---
-      str_detect(stock_area_std, "gulf of mexico|eastern gulf of mexico|atlantic and gulf of mexico|gulf of mexico") ~ "gulf",
+      str_detect(stock_area_std, "gulf of mexico|eastern gulf of mexico|atlantic and gulf of mexico|gulf of mexico|texas") ~ "gulf",
       
       # --- SOUTH ATLANTIC ---
-      str_detect(stock_area_std, "south atlantic|southern atlantic|carolinas|florida keys|east florida") ~ "south atlantic",
+      str_detect(stock_area_std, "south atlantic|southern atlantic|carolinas|florida keys|east florida") ~ "south_atlantic",
       
       # --- MID-ATLANTIC (incl. Cape Hatteras transitions) ---
-      str_detect(stock_area_std, "mid-atlantic|cape hatteras") ~ "middle atlantic",
+      str_detect(stock_area_std, "mid-atlantic|cape hatteras") ~ "middle_atlantic",
       
       # --- NEW ENGLAND / NEFSC-ish ---
       str_detect(stock_area_std,
-                 "gulf of maine|georges bank|cape cod|southern new england|north atlantic|northwestern atlantic") ~ "new england",
+                 "gulf of maine|georges bank|cape cod|southern new england|north atlantic|northwestern atlantic") ~ "new_england",
       
       # --- PACIFIC ISLANDS (tropical + central/western pacific management areas) ---
       str_detect(stock_area_std,
@@ -324,11 +324,11 @@ stock_area_xwalk <- most_recent_stock_status_clean %>%
       
       # --- WEST COAST (default for CONUS Pacific coast / river basins / Puget Sound etc.) ---
       str_detect(stock_area_std,
-                 "california|oregon|washington|pacific coast|point conception|juan de fuca|puget sound|columbia river|klamath|willapa|grays harbor|quinault|quillayute|queets|hoh|hoko") ~ "pacific coast",
+                 "california|oregon|washington|pacific coast|point conception|juan de fuca|puget sound|columbia river|klamath|willapa|grays harbor|quinault|quillayute|queets|hoh|hoko|pacific northwest|northern california|southern california") ~ "pacific_coast",
       
       # --- FALLBACKS / GENERICS ---
-      stock_area_std %in% c("pacific", "pacific coast", "eastern pacific", "north pacific", "northern pacific coast", "southern pacific coast", "eastern pacific") ~ "pacific coast",
-      stock_area_std %in% c("atlantic", "atlantic coast", "atlantic coast / alaska", "western atlantic", "atlantic and gulf of mexico") ~ "middle atlantic",
+      stock_area_std %in% c("pacific", "pacific coast", "eastern pacific", "north pacific", "northern pacific coast", "southern pacific coast", "eastern pacific") ~ "pacific_coast",
+      stock_area_std %in% c("atlantic", "atlantic coast", "atlantic coast / alaska", "western atlantic", "atlantic and gulf of mexico") ~ "middle_atlantic",
       
       TRUE ~ NA_character_
     )
