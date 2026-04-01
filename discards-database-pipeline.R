@@ -621,3 +621,112 @@ readr::write_csv(mrip_pivot_out, "MRIP_stock_status_breakdown_2020-2024.csv")
 # EXTRAS ------------------------------------------------------------------
 
 # Exploratory plots?
+
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+mrip_plot_prep <- mrip_pivot_out %>%
+  mutate(
+    total_caught = released_b2 + total_harvest_a_b1
+  )
+
+# Pull stock status from the rows where it exists, then carry it across all years
+status_lookup_mrip <- mrip_plot_prep %>%
+  filter(!is.na(assessment_id)) %>%
+  distinct(
+    tsn_region_unique,
+    f_flimit,
+    b_blimit,
+    flimit,
+    fmsy,
+    blimit,
+    bmsy,
+    assessment_year,
+    assessment_id
+  ) %>%
+  mutate(
+    poor_stock_condition = case_when(
+      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
+      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
+      TRUE ~ NA
+    )
+  )
+
+mrip_plot_prep <- mrip_plot_prep %>%
+  select(-any_of(c(
+    "f_flimit", "b_blimit", "flimit", "fmsy", "blimit", "bmsy",
+    "assessment_year", "assessment_id"
+  ))) %>%
+  left_join(status_lookup_mrip, by = "tsn_region_unique")
+
+region_year_discard <- mrip_plot_prep %>%
+  filter(!is.na(region_merged), !is.na(year), !is.na(total_caught), total_caught > 0) %>%
+  group_by(region_merged, year) %>%
+  summarise(
+    released_total = sum(released_b2, na.rm = TRUE),
+    caught_total = sum(total_caught, na.rm = TRUE),
+    discard_prop_weighted = if_else(caught_total == 0, NA_real_, released_total / caught_total),
+    .groups = "drop"
+  )
+
+ggplot(region_year_discard, aes(x = year, y = discard_prop_weighted, color = region_merged)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Catch-weighted discard proportion over time by region",
+    x = "Year",
+    y = "Discard proportion"
+  ) +
+  theme_minimal()
+
+region_year_poor_discard <- mrip_plot_prep %>%
+  filter(
+    poor_stock_condition == TRUE,
+    !is.na(region_merged),
+    !is.na(year),
+    !is.na(total_caught),
+    total_caught > 0
+  ) %>%
+  group_by(region_merged, year) %>%
+  summarise(
+    released_total = sum(released_b2, na.rm = TRUE),
+    caught_total = sum(total_caught, na.rm = TRUE),
+    discard_prop_weighted = if_else(caught_total == 0, NA_real_, released_total / caught_total),
+    n_stocks = n_distinct(tsn_region_unique),
+    .groups = "drop"
+  )
+
+ggplot(region_year_poor_discard, aes(x = year, y = discard_prop_weighted, color = region_merged)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Catch-weighted discard proportion over time for poor-condition stocks",
+    x = "Year",
+    y = "Discard proportion"
+  ) +
+  theme_minimal()
+
+poor_stock_year_discard <- mrip_plot_prep %>%
+  filter(
+    poor_stock_condition == TRUE,
+    !is.na(year),
+    !is.na(total_caught),
+    total_caught > 0
+  ) %>%
+  mutate(
+    discard_prop = released_b2 / total_caught
+  )
+
+ggplot(
+  poor_stock_year_discard,
+  aes(x = year, y = discard_prop, group = tsn_region_unique)
+) +
+  geom_line(alpha = 0.35) +
+  facet_wrap(~ region_merged) +
+  labs(
+    title = "Stock-level discard proportions over time for poor-condition stocks",
+    x = "Year",
+    y = "Discard proportion"
+  ) +
+  theme_minimal()
