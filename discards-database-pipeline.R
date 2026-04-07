@@ -407,7 +407,16 @@ FOSS_pivot_out <- foss_pivoted %>%
     by = c("tsn_region_unique", "year")
   )
 
-readr::write_csv(FOSS_pivot_out2, "FOSS_stock_status_breakdown_2020-2024.csv")
+FOSS_pivot_out <- FOSS_pivot_out %>%
+  mutate(
+    poor_stock_condition = case_when(
+      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
+      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
+      TRUE ~ NA
+    )
+  )
+
+readr::write_csv(FOSS_pivot_out, "FOSS_stock_status_breakdown_2020-2024.csv")
 
 
 # MRIP --------------------------------------------------------------------
@@ -498,7 +507,7 @@ mrip_unmatched_afs %>%
   arrange(common_name) %>%
   print(n = Inf)
 
-# At this point, visual inspection of the remaining unmatched species tells me that it's a mix of true missing values from the key and formatting/naming conventions. For example, "GREY SNAPPER" is reported in our MRIP data along with "GRAY SNAPPER," but the key only contains the latter. Another example is "BALLONFISH" in our MRIP data, whereas the key lists a "BALLOONFISH."
+# At this point, visual inspection of the remaining unmatched species tells me that it's a mix of true missing values from the key and formatting/naming conventions. For example, "GREY SNAPPER" is reported in our MRIP data along with "GRAY SNAPPER," but the key only contains the latter. Another example is "BALLONFISH" in our MRIP data, whereas the key lists as "BALLOONFISH."
 
 ## Let's recover the new matches from the AFS matching
 afs_recovered_lookup <- mrip_unmatched_afs %>%
@@ -615,6 +624,16 @@ mrip_pivot_out <- mrip_pivot_out %>%
     )
   )
 
+mrip_pivot_out <- mrip_pivot_out %>%
+  mutate(
+    total_caught = released_b2 + total_harvest_a_b1,
+    poor_stock_condition = case_when(
+      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
+      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
+      TRUE ~ NA
+    )
+  )
+
 readr::write_csv(mrip_pivot_out, "MRIP_stock_status_breakdown_2020-2024.csv")
 
 
@@ -656,7 +675,7 @@ status_lookup_mrip <- mrip_plot_prep %>%
 mrip_plot_prep <- mrip_plot_prep %>%
   select(-any_of(c(
     "f_flimit", "b_blimit", "flimit", "fmsy", "blimit", "bmsy",
-    "assessment_year", "assessment_id"
+    "assessment_year", "assessment_id", "poor_stock_condition"
   ))) %>%
   left_join(status_lookup_mrip, by = "tsn_region_unique")
 
@@ -670,6 +689,7 @@ region_year_discard <- mrip_plot_prep %>%
     .groups = "drop"
   )
 
+# Catch-weighted discard proportion for stocks by region
 ggplot(region_year_discard, aes(x = year, y = discard_prop_weighted, color = region_merged)) +
   geom_line(linewidth = 1) +
   geom_point() +
@@ -680,6 +700,7 @@ ggplot(region_year_discard, aes(x = year, y = discard_prop_weighted, color = reg
   ) +
   theme_minimal()
 
+# Catch-weighted discard proportion for "poor-condition" stocks by region (i.e. either overfished or subject to overfishing)
 region_year_poor_discard <- mrip_plot_prep %>%
   filter(
     poor_stock_condition == TRUE,
@@ -707,6 +728,7 @@ ggplot(region_year_poor_discard, aes(x = year, y = discard_prop_weighted, color 
   ) +
   theme_minimal()
 
+# Stock-level discard proportions for poor-condition stocks (unweighted)
 poor_stock_year_discard <- mrip_plot_prep %>%
   filter(
     poor_stock_condition == TRUE,
@@ -730,3 +752,35 @@ ggplot(
     y = "Discard proportion"
   ) +
   theme_minimal()
+
+# Unweighted discard proportions by region
+region_year_poor_discard_unweighted <- mrip_plot_prep %>%
+  filter(
+    poor_stock_condition == T,
+    !is.na(region_merged),
+    !is.na(year),
+    !is.na(total_caught),
+    total_caught > 0
+  ) %>%
+  mutate(
+    discard_prop = released_b2 / total_caught
+  ) %>%
+  group_by(region_merged, year) %>%
+  summarize(
+    discard_prop_unweighted = mean(discard_prop, na.rm = T),
+    n_stocks = n_distinct(tsn_region_unique),
+    .groups = "drop"
+  )
+
+ggplot(region_year_poor_discard_unweighted, aes(x = year, y = discard_prop_unweighted, color = region_merged)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Unweighted mean discard proportion over time for poor-condition stocks",
+    x = "Year",
+    y = "Mean discard proportion (unweighted)"
+  ) +
+  theme_minimal()
+
+
+
