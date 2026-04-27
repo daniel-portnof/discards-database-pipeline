@@ -8,8 +8,6 @@ This is an ongoing, WIP project.
 
 *NOTE:* You will need to download the `FOSS_raw_2020_2024.csv`, `MRIP national (for BI).xlsx`, `StockSmart Assessment_Summary_Data_all_years.csv`, and `MRIP_TO_TSN.xlsx` files into your working directory to run the main `discards-database-pipeline.R` scrip.
 
-### Notes (04-26-2026):
-
 ## Repository Contents
 
 | File / Folder | Description |
