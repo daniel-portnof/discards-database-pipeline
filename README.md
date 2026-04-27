@@ -20,6 +20,7 @@ This is an ongoing, WIP project.
 
 ## Outputs
 
+| File / Folder | Description |
 |---|---|
 | `FOSS_sector_breakdown_2020-2024.csv` | FOSS sector breakdown |
 | `FOSS_stock_status_breakdown_2020-2024.csv` | FOSS + stock status |
