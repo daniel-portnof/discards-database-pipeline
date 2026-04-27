@@ -13,14 +13,14 @@ This is an ongoing, WIP project.
 | File / Folder | Description |
 |---|---|
 | `discards-database-pipeline.R` | Script to clean and standardize all datasets, create joining table keys to resolve species names across data sources, generate stock-region unique identifier labels, and append most recent stock status variables to each stock. The output is cleaned, aggregated datasets linking landings, discard proportions, and stock status across regions and time |
-#### Data Inputs
-| `FOSS_raw_2020_2024.csv` | FOSS landings data (commercial and recreational) |
-| `MRIP national (for BI).xlsx` | Recreational sector harvest and release estimates |
-| `StockSmart Assessment_Summary_Data_all_years.csv` | Stock assessment reference points |
+| `FOSS_raw_2020_2024.csv` | FOSS landings data input (commercial and recreational) |
+| `MRIP national (for BI).xlsx` | Recreational sector harvest and release estimates data input |
+| `StockSmart Assessment_Summary_Data_all_years.csv` | Stock assessment reference points data input |
 | `MRIP_TO_TSN.xlsx` | Species crosswalks for matching MRIP data entries to Taxonomic Species Numbers (used in other data sources, namely FOSS) |
 
 ## Outputs
 
+|---|---|
 | `FOSS_sector_breakdown_2020-2024.csv` | FOSS sector breakdown |
 | `FOSS_stock_status_breakdown_2020-2024.csv` | FOSS + stock status |
 | `MRIP_stock_status_breakdown_2020-2024.csv` | MRIP + stock status + discard proportions |
