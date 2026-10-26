@@ -211,19 +211,9 @@ foss_pivoted <- foss_pivoted %>%
     tsn_region_unique = paste(region_merged, tsn, sep = "_")
   )
 
-most_recent_stock_status <- stocksmart_raw %>%
-  group_by(
-    ITIS.Taxon.Serial.Number,
-    Stock.ID,
-    Regional.Ecosystem,
-    Science.Center,
-    FMP,
-    Jurisdiction
-  ) %>%
-  filter(Assessment.Year == max(Assessment.Year, na.rm = T)) %>%
-  ungroup()
+# 1. Keep ALL assessments, not just the latest ---------------------------------
 
-most_recent_stock_status_clean <- most_recent_stock_status %>%
+status_all <- stocksmart_raw %>%
   clean_names() %>%
   mutate(
     across(
@@ -231,190 +221,133 @@ most_recent_stock_status_clean <- most_recent_stock_status %>%
       ~ .x %>%
         as.character() %>%
         str_squish() %>%
-        str_to_lower()
-    )
-  )
-
-most_recent_stock_status_clean <- most_recent_stock_status_clean %>%
-  mutate(
-    across(
-      c(jurisdiction, science_center, regional_ecosystem, stock_area),
-      ~ str_replace_all(.x, "\\s*/\\s*", " / ")
-    )
-  )
-
-sc_xwalk <- tibble::tribble( # add texas to gulf filters; pacific northwest, northern california, southern california to pacific coast filters
-  ~pattern, ~merged_region,
-  "nefsc", "new england",
-  "sefsc", "south atlantic",
-  "gmfsc", "gulf",
-  "afsc", "alaska",
-  "pifsc", "hawaii",
-  "nwfsc", "pacific coast",
-  "swfsc", "pacific coast"
-)
-
-eco_xwalk <- tibble::tribble( # add texas to gulf filters; pacific northwest, northern california, southern california to pacific coast filters
-  ~pattern, ~merged_region,
-  "california current", "pacific coast",
-  "gulf of mexico", "gulf",
-  "northeast shelf", "new england",
-  "pacific islands ecosystem complex", "hawaii",
-  "southeast shelf", "south atlantic"
-)
-
-assign_region_from_patterns <- function(x, patterns, region) {
-  # returns firts matching region; NA if none match
-  out <- rep(NA_character_, length(x))
-  for (i in seq_along(patterns)) {
-    hits <- !is.na(x) & str_detect(x, fixed(patterns[i]))
-    out[is.na(out) & hits] <- region[i]
-  }
-  out
-}
-
-status_with_region <- most_recent_stock_status_clean %>%
-  mutate(
-    region_sc = assign_region_from_patterns(science_center, sc_xwalk$pattern, sc_xwalk$merged_region),
-    region_eco = assign_region_from_patterns(regional_ecosystem, eco_xwalk$pattern, eco_xwalk$merged_region),
-    
-    # choose final region by priority:
-    merged_region = coalesce(region_sc, region_eco)
-  )
-
-status_with_region <- status_with_region %>%
-  mutate(
-    ambiguous_sc = str_detect(science_center, "/"),
-    ambiguous_eco = str_detect(regional_ecosystem, "/")
-  )
-
-
-stock_area_xwalk <- most_recent_stock_status_clean %>%
-  clean_names() %>%
-  distinct(stock_area) %>%
-  mutate(
-    stock_area_std = stock_area %>%
-      str_squish() %>%
-      str_to_lower(),
-    
-    merged_region = case_when( # add texas to gulf filters; pacific northwest, northern california, southern california to pacific coast filters
-      # --- CARIBBEAN ---
-      str_detect(stock_area_std, "caribbean|puerto rico|st\\. croix|st\\. thomas|st\\. john") ~ "caribbean",
-      
-      # --- GULF OF MEXICO ---
-      str_detect(stock_area_std, "gulf of mexico|eastern gulf of mexico|atlantic and gulf of mexico|gulf of mexico|texas") ~ "gulf",
-      
-      # --- SOUTH ATLANTIC ---
-      str_detect(stock_area_std, "south atlantic|southern atlantic|carolinas|florida keys|east florida") ~ "south_atlantic",
-      
-      # --- MID-ATLANTIC (incl. Cape Hatteras transitions) ---
-      str_detect(stock_area_std, "mid-atlantic|cape hatteras") ~ "middle_atlantic",
-      
-      # --- NEW ENGLAND / NEFSC-ish ---
-      str_detect(stock_area_std,
-                 "gulf of maine|georges bank|cape cod|southern new england|north atlantic|northwestern atlantic") ~ "new_england",
-      
-      # --- PACIFIC ISLANDS (tropical + central/western pacific management areas) ---
-      str_detect(stock_area_std,
-                 "main hawaiian islands|hawaii|guam|american samoa|south pacific|western and central pacific|eastern north pacific far north migrating") ~ "hawaii",
-      
-      # --- ALASKA ---
-      str_detect(stock_area_std,
-                 "alaska|aleutian|bering|bristol bay|gulf of alaska|pribilof|norton sound|yakutat|saint matthew|bogoslof|auke creek|berners river|ford arm lake|hugh smith lake") ~ "alaska",
-      
-      # --- WEST COAST (default for CONUS Pacific coast / river basins / Puget Sound etc.) ---
-      str_detect(stock_area_std,
-                 "california|oregon|washington|pacific coast|point conception|juan de fuca|puget sound|columbia river|klamath|willapa|grays harbor|quinault|quillayute|queets|hoh|hoko|pacific northwest|northern california|southern california") ~ "pacific_coast",
-      
-      # --- FALLBACKS / GENERICS ---
-      stock_area_std %in% c("pacific", "pacific coast", "eastern pacific", "north pacific", "northern pacific coast", "southern pacific coast", "eastern pacific") ~ "pacific_coast",
-      stock_area_std %in% c("atlantic", "atlantic coast", "atlantic coast / alaska", "western atlantic", "atlantic and gulf of mexico") ~ "middle_atlantic",
-      
-      TRUE ~ NA_character_
+        str_to_lower() %>%
+        str_replace_all("\\s*/\\s*", " / ")
     )
   ) %>%
-  select(stock_area, merged_region)
+  filter(
+    !is.na(itis_taxon_serial_number),
+    !is.na(assessment_year),
+    !regional_ecosystem %in% c("pacific highly migratory", "caribbean sea"),
+    jurisdiction != "atlantic hms"
+  )
 
-# Anything that didn't map?
-stock_area_xwalk %>%
+# 2. Stock area -> merged region -----------------------------------------------
+
+map_stock_area <- function(x) {
+  x <- str_squish(str_to_lower(x))
+  case_when(
+    str_detect(x, "caribbean|puerto rico|st\\. croix|st\\. thomas|st\\. john") ~ "caribbean",
+    str_detect(x, "gulf of mexico|eastern gulf of mexico|atlantic and gulf of mexico|texas") ~ "gulf",
+    str_detect(x, "south atlantic|southern atlantic|carolinas|florida keys|east florida") ~ "south_atlantic",
+    str_detect(x, "mid-atlantic|cape hatteras") ~ "middle_atlantic",
+    str_detect(x, "gulf of maine|georges bank|cape cod|southern new england|north atlantic|northwestern atlantic") ~ "new_england",
+    str_detect(x, "main hawaiian islands|hawaii|guam|american samoa|south pacific|western and central pacific|eastern north pacific far north migrating") ~ "hawaii",
+    str_detect(x, "alaska|aleutian|bering|bristol bay|gulf of alaska|pribilof|norton sound|yakutat|saint matthew|bogoslof|auke creek|berners river|ford arm lake|hugh smith lake") ~ "alaska",
+    str_detect(x, "california|oregon|washington|pacific coast|point conception|juan de fuca|puget sound|columbia river|klamath|willapa|grays harbor|quinault|quillayute|queets|hoh|hoko|pacific northwest|northern california|southern california") ~ "pacific_coast",
+    x %in% c("pacific", "pacific coast", "eastern pacific", "north pacific",
+             "northern pacific coast", "southern pacific coast",
+             "northern subpopulation") ~ "pacific_coast", # northern anchovy
+    x %in% c("atlantic", "atlantic coast", "atlantic coast / alaska", "western atlantic", "atlantic and gulf of mexico") ~ "middle_atlantic",
+    TRUE ~ NA_character_
+  )
+}
+
+status_history <- status_all %>%
+  mutate(
+    merged_region = map_stock_area(stock_area),
+    tsn_region_unique = paste(merged_region, itis_taxon_serial_number, sep = "_")
+  )
+
+## Stock areas that didn't map (should be empty; recheck when new data come in)
+status_history %>%
   filter(is.na(merged_region)) %>%
+  distinct(stock_area) %>%
   arrange(stock_area)
 
-# How many per region?
-stock_area_xwalk %>%
-  count(merged_region, sort = TRUE)
-
-# Any stock areas that include "/" (often composite areas)?
-most_recent_stock_status_clean %>%
-  clean_names() %>%
-  distinct(stock_area) %>%
-  filter(str_detect(stock_area, "/"))
-
-status_most_recent_with_region <- status_with_region %>%
-  clean_names() %>%
-  left_join(stock_area_xwalk, by = "stock_area")
-
-status_most_recent_with_region_clean <- status_most_recent_with_region %>%
-  filter(!is.na(itis_taxon_serial_number)) %>%
-  filter(!regional_ecosystem %in% c("pacific highly migratory", "caribbean sea")) %>%
-  filter(jurisdiction != "atlantic hms") %>%
+status_history <- status_history %>%
+  filter(!is.na(merged_region)) %>%
   select(
-    stock_id,
-    stock_name,
-    jurisdiction,
-    science_center,
-    regional_ecosystem,
-    itis_taxon_serial_number,
-    common_name,
-    stock_area,
-    assessment_id,
-    assessment_year,
-    flimit,
-    fmsy,
-    f_flimit,
-    b_blimit,
-    blimit,
-    bmsy,
-    region_sc,
-    region_eco,
-    merged_region.x,
-    ambiguous_sc,
-    ambiguous_eco,
-    merged_region.y
+    tsn_region_unique, stock_id, stock_name, assessment_year, assessment_id,
+    flimit, fmsy, f_flimit, b_blimit, blimit, bmsy
   )
 
-status_most_recent_with_region_clean <- status_most_recent_with_region_clean %>%
-  mutate(
-    tsn_region_unique = paste(merged_region.y, itis_taxon_serial_number, sep = "_")
-  )
+## If one stock has two assessments in the same year, keep the later record
+## (higher assessment_id). Placeholder rule; check how often it happens:
+status_history %>%
+  count(stock_id, assessment_year) %>%
+  filter(n > 1)
 
-status_append <- status_most_recent_with_region_clean %>%
-  select(tsn_region_unique, flimit, fmsy, f_flimit, b_blimit, blimit, bmsy, assessment_year, assessment_id,)
-
-status_append <- status_append %>%
-  group_by(tsn_region_unique) %>%
-  slice_max(assessment_year, n = 1, with_ties = F) %>%
+status_history <- status_history %>%
+  group_by(stock_id, assessment_year) %>%
+  slice_max(assessment_id, n = 1, with_ties = FALSE) %>%
   ungroup()
 
-most_recent_year <- max(foss_pivoted$year, na.rm = T)
+# 3. Per-stock as-of join, then summarize to species x region x year -----------
+
+build_status_by_year <- function(status_history, years) {
+  stock_years <- status_history %>%
+    distinct(tsn_region_unique, stock_id) %>%
+    cross_join(tibble(year = years))
+  
+  stock_years %>%
+    left_join(
+      status_history %>% select(-tsn_region_unique),
+      by = join_by(stock_id, closest(year >= assessment_year)),
+      relationship = "many-to-one"
+    ) %>%
+    filter(!is.na(assessment_id)) %>% # stock not yet assessed as of this year
+    mutate(
+      poor = case_when(
+        (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
+        !is.na(f_flimit) | !is.na(b_blimit) ~ FALSE,
+        TRUE ~ NA
+      )
+    ) %>%
+    group_by(tsn_region_unique, year) %>%
+    summarize(
+      n_stocks               = n_distinct(stock_id),
+      n_stocks_with_status   = sum(!is.na(poor)),
+      n_poor                 = sum(poor, na.rm = TRUE),
+      any_poor               = if (all(is.na(poor))) NA else any(poor, na.rm = TRUE),
+      max_f_flimit           = suppressWarnings(max(f_flimit, na.rm = TRUE)),
+      min_b_blimit           = suppressWarnings(min(b_blimit, na.rm = TRUE)),
+      latest_assessment_year = max(assessment_year),
+      oldest_assessment_year = min(assessment_year),
+      stock_ids              = paste(sort(unique(stock_id)), collapse = ", "),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      across(c(max_f_flimit, min_b_blimit), ~ if_else(is.infinite(.x), NA_real_, .x)),
+      poor_stock_condition = any_poor # keeps existing plot code and Power BI fields working
+    )
+}
+
+data_years <- sort(unique(c(foss_pivoted$year, mrip_collapsed$year)))
+
+status_by_year <- build_status_by_year(status_history, data_years)
+
+# 4. Attach to FOSS and MRIP ---------------------------------------------------
 
 FOSS_pivot_out <- foss_pivoted %>%
-  left_join(
-    foss_pivoted %>%
-      filter(year == most_recent_year) %>%
-      left_join(status_append, by = "tsn_region_unique") %>%
-      select(tsn_region_unique, year, flimit, fmsy, f_flimit, b_blimit, blimit, bmsy, assessment_year, assessment_id),
-    by = c("tsn_region_unique", "year")
+  left_join(status_by_year, by = c("tsn_region_unique", "year"),
+            relationship = "many-to-one")
+
+mrip_pivot_out <- mrip_collapsed %>%
+  left_join(status_by_year, by = c("tsn_region_unique", "year"),
+            relationship = "many-to-one") %>%
+  mutate(
+    total_caught = released_b2 + total_harvest_a_b1,
+    discard_proportion = if_else(total_caught > 0, released_b2 / total_caught, NA_real_)
   )
 
-FOSS_pivot_out <- FOSS_pivot_out %>%
-  mutate(
-    poor_stock_condition = case_when(
-      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
-      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
-      TRUE ~ NA
-    )
-  )
+## Row counts should be unchanged by the status joins
+nrow(FOSS_pivot_out) - nrow(foss_pivoted)
+nrow(mrip_pivot_out) - nrow(mrip_collapsed)
+
+# NOTE: the plot-prep block that builds `status_lookup_mrip` and carries the
+# latest status across all years is no longer needed. Every row now has its own
+# year-appropriate status, so feed mrip_pivot_out straight into the summaries.
 
 readr::write_csv(FOSS_pivot_out, "FOSS_stock_status_breakdown_2020-2024.csv")
 
@@ -531,6 +464,34 @@ tsn_lookup_mrip_tfs <- bind_rows(
 ) %>%
   distinct(tsn, name_merged, .keep_all = T)
 
+# Pin names that map to multiple TSNs, or that the TSN lookup misses (resolved 2026-10-26)
+tsn_overrides <- tribble(
+  ~name_merged,                   ~tsn,
+  # Names mapping to 2 TSNs
+  "BUTTERFISH",                   172567,
+  "UNIDENTIFIED SKATE OR RAY",    160806,
+  "SPADEFISHES",                  553178,
+  "SEABASS, WHITE",               169387,
+  "TRUMPETFISH",                  166411,
+  "ELONGATE FROSTFISH",           768169,
+  # TSNs with multiple MRIP names (lookup fell back to the AFS name)
+  "WINTER FLOUNDER",              172905,
+  "YELLOWTAIL FLOUNDER",          172909,
+  "DEACON ROCKFISH",              166730,
+  "DEACON/BLUE ROCKFISH UNKNOWN", 166730,
+  # Spelling/naming differences between MRIP data and the key
+  "COWCOD",                       166754,  # key: COW ROCKFISH
+  "GREY SNAPPER",                 168848,  # key: GRAY SNAPPER
+  "BALLONFISH",                   173392   # typo in MRIP data
+)
+
+tsn_lookup_mrip_tfs <- tsn_lookup_mrip_tfs %>%
+  anti_join(tsn_overrides, by = "name_merged") %>%
+  bind_rows(tsn_overrides)
+
+# Guard: stops the script if any name maps to more than one TSN in future data
+stopifnot(!any(duplicated(na.omit(tsn_lookup_mrip_tfs$name_merged))))
+
 ## And join that into a single mrip table
 mrip_tsn_joined <- mrip_clean %>%
   left_join(
@@ -591,48 +552,38 @@ mrip_collapsed <- mrip_collapsed %>%
     tsn_region_unique = paste(region_merged, tsn, sep = "_")
   )
 
+
+# =============================================================================
+# MRIP name-join check
+# -----------------------------------------------------------------------------
+# The "Any duplicates? NO!" check on mrip_collapsed can't catch this: if one
+# common_name maps to two TSNs, the left join copies that species' catch into
+# both TSN groups. Each group is unique on (region, tsn, year), so no duplicate
+# shows up, but the catch is counted twice. These two checks catch it:
+# =============================================================================
+
+## Names in the lookup that point at more than one TSN
+tsn_lookup_mrip_tfs %>%
+  filter(!is.na(name_merged)) %>%
+  count(name_merged) %>%
+  filter(n > 1)
+
+## Did the join add rows? Should be 0.
+nrow(mrip_tsn_joined) - nrow(mrip_clean)
+
+## Separate issue: catch from all unmatched species lands in one NA-TSN row per
+## region-year. How much catch is that?
+mrip_tsn_joined %>%
+  filter(is.na(tsn)) %>%
+  summarize(
+    n_species = n_distinct(common_name),
+    harvest = sum(total_harvest_a_b1, na.rm = TRUE),
+    released = sum(released_b2, na.rm = TRUE)
+  )
+
+
+
 ## Grab the most recent year of your MRIP data for comparison with the most recent stock assessment
-most_recent_mrip_year <- max(mrip_collapsed$year, na.rm = T)
-
-mrip_pivot_out <- mrip_collapsed %>%
-  left_join(
-    mrip_collapsed %>%
-      filter(year == most_recent_mrip_year) %>%
-      left_join(status_append, by = "tsn_region_unique") %>%
-      select(
-        tsn_region_unique,
-        year,
-        flimit,
-        fmsy,
-        f_flimit,
-        b_blimit,
-        blimit,
-        bmsy,
-        assessment_year,
-        assessment_id
-      ),
-    by = c("tsn_region_unique", "year")
-  )
-
-## Generate discard proportions
-mrip_pivot_out <- mrip_pivot_out %>%
-  mutate(
-    discard_proportion = case_when(
-      is.na(released_b2) | is.na(total_harvest_a_b1) ~ NA_real_,
-      (released_b2 + total_harvest_a_b1) == 0 ~ NA_real_,
-      T ~ released_b2 / (released_b2 + total_harvest_a_b1)
-    )
-  )
-
-mrip_pivot_out <- mrip_pivot_out %>%
-  mutate(
-    total_caught = released_b2 + total_harvest_a_b1,
-    poor_stock_condition = case_when(
-      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
-      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
-      TRUE ~ NA
-    )
-  )
 
 readr::write_csv(mrip_pivot_out, "MRIP_stock_status_breakdown_2020-2024.csv")
 
@@ -650,34 +601,7 @@ mrip_plot_prep <- mrip_pivot_out %>%
     total_caught = released_b2 + total_harvest_a_b1
   )
 
-# Pull stock status from the rows where it exists, then carry it across all years
-status_lookup_mrip <- mrip_plot_prep %>%
-  filter(!is.na(assessment_id)) %>%
-  distinct(
-    tsn_region_unique,
-    f_flimit,
-    b_blimit,
-    flimit,
-    fmsy,
-    blimit,
-    bmsy,
-    assessment_year,
-    assessment_id
-  ) %>%
-  mutate(
-    poor_stock_condition = case_when(
-      (!is.na(f_flimit) & f_flimit > 1) | (!is.na(b_blimit) & b_blimit < 1) ~ TRUE,
-      (!is.na(f_flimit) | !is.na(b_blimit)) ~ FALSE,
-      TRUE ~ NA
-    )
-  )
-
-mrip_plot_prep <- mrip_plot_prep %>%
-  select(-any_of(c(
-    "f_flimit", "b_blimit", "flimit", "fmsy", "blimit", "bmsy",
-    "assessment_year", "assessment_id", "poor_stock_condition"
-  ))) %>%
-  left_join(status_lookup_mrip, by = "tsn_region_unique")
+mrip_plot_prep <- mrip_pivot_out
 
 region_year_discard <- mrip_plot_prep %>%
   filter(!is.na(region_merged), !is.na(year), !is.na(total_caught), total_caught > 0) %>%
