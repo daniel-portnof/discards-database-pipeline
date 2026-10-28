@@ -27,10 +27,10 @@ for (f in list.files("pipeline", pattern = "\\.R$", full.names = TRUE)) source(f
 # Build ------------------------------------------------------------------------
 
 d <- build_discards_data(
-  foss_path       = "FOSS_raw_2020_2024.csv",
-  mrip_path       = "MRIP national (for BI).xlsx",
-  stocksmart_path = "StockSmart Assessment_Summary_Data_all_years.csv",
-  tsn_key_path    = "MRIP_TO_TSN.xlsx",
+  foss_path       = "data-raw/FOSS_raw_2020_2024.csv",
+  mrip_path       = "data-raw/MRIP national (for BI).xlsx",
+  stocksmart_path = "data-raw/StockSmart Assessment_Summary_Data_all_years.csv",
+  tsn_key_path    = "data-raw/MRIP_TO_TSN.xlsx",
   years           = NULL,        # e.g. 2022:2024 for a subset; NULL = all years
   out_dir         = "output"
 )
