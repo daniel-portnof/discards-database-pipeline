@@ -9,6 +9,7 @@
 
 library(shiny)
 library(bslib)
+library(plotly)
 library(tidyverse)
 
 # Data -------------------------------------------------------------------------
@@ -83,7 +84,11 @@ ui <- page_sidebar(
       p("Below 1 = overfished")
     )
   ),
-  card(card_header("Discard proportion by year"), plotOutput("ts_plot")),
+  layout_columns(
+    col_widths = c(6, 6),
+    card(card_header("Harvest v. discards"), plotlyOutput("catch_plot")),
+    card(card_header("Discard proportion and stock status"), plotlyOutput("ts_plot"))
+  ),
   card(card_header("Year by year"), tableOutput("detail"))
 )
 
@@ -147,18 +152,55 @@ server <- function(input, output, session) {
   output$vb_b <- renderText(num2(latest()$min_b_blimit))
 
   # Time series
-  output$ts_plot <- renderPlot({
+  output$ts_plot <- renderPlotly({
     s <- sel(); req(nrow(s) > 0)
-    ggplot(s, aes(year, discard_proportion)) +
+    p <- ggplot(s, aes(factor(year), discard_proportion, group = 1)) +
       geom_line(colour = "grey60") +
-      geom_point(aes(colour = status_label), size = 3.5) +
-      scale_colour_manual(values = status_cols, limits = names(status_cols), name = NULL) +
+      geom_point(aes(colour = status_label,
+                     text = paste0(year, ": ", pct(discard_proportion), " released<br>", status_label)), 
+                 size = 3.5) +
+      scale_colour_manual(values = status_cols, name = NULL) +
       scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
-      scale_x_continuous(breaks = function(x) unique(floor(pretty(x)))) +
-      labs(x = NULL, y = "Released (B2) / total caught") +
+      labs(x = NULL, y = "Discard proportion") +
       theme_minimal(base_size = 14) +
-      theme(legend.position = "bottom")
+      theme(panel.grid.major.x = element_blank())
+    
+    ggplotly(p, tooltip = "text") %>%
+      layout(legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.15)) %>%
+      config(displayModebar = FALSE)
   })
+  
+  # Harvest v. discards, stacked bar charts
+  output$catch_plot <- renderPlotly({
+    s <- sel(); req(nrow(s) > 0)
+    
+    # one row per year x fate, for stacked bar charts
+    s_long <- s %>%  
+      select(year, Harvested = total_harvest_a_b1, Released = released_b2) %>%
+      pivot_longer(-year, names_to = "fate", values_to = "fish") %>%
+      mutate(fate = factor(fate, levels = c("Released", "Harvested"))) %>%
+      mutate(share = fish / sum(fish), .by = year)
+    
+    p <- ggplot(s_long, aes(factor(year), fish, fill = fate)) +
+      geom_col(
+        aes(text = paste0(fate, ": ", scales::comma(fish), " fish (", pct(share), ")")),
+        width = 0.7
+      ) +
+      geom_text(
+        aes(label = if_else(share >= 0.08, pct(share), "")),
+        position = position_stack(vjust = 0.5),
+        color = "white", size = 4.5
+      ) +
+      scale_fill_manual(values = c(Harvested = "dodgerblue4", Released = "steelblue"), name = NULL) +
+      scale_y_continuous(labels = scales::comma) +
+      labs(x = NULL, y = "Number of fish") +
+      theme_minimal(base_size = 14) +
+      theme(panel.grid.major.x = element_blank())
+    
+    ggplotly(p, tooltip = "text") %>%
+      layout(legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.15)) %>%
+      config(displayModeBar = FALSE)
+      })
 
   # Detail table
   output$detail <- renderTable({
