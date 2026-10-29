@@ -1,18 +1,18 @@
-# =============================================================================
+# ============================================================================#
 # build_discards_data(): the whole pipeline in one call
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------#
 # Reads the four raw inputs, runs FOSS, MRIP and stock status, and writes:
-#   - FOSS_sector_breakdown_<years>.csv        (Power BI, as before)
-#   - FOSS_stock_status_breakdown_<years>.csv  (Power BI, as before)
-#   - MRIP_stock_status_breakdown_<years>.csv  (Power BI, as before)
-#   - discards_data.rds                        (everything the Shiny app reads)
+#   - FOSS_sector_breakdown_<years>.csv        (Power BI)
+#   - FOSS_stock_status_breakdown_<years>.csv  (Power BI)
+#   - MRIP_stock_status_breakdown_<years>.csv  (Power BI)
+#   - discards_data.rds                        (everything our Shiny app reads)
 #
 # Usage:
-#   source("foss_functions.R"); source("mrip_functions.R")
-#   source("status_functions.R"); source("build_discards_data.R")
+#   source("foss.R"); source("mrip.R")
+#   source("status.R"); source("build.R")
 #   d <- build_discards_data()                    # all years in the raw files
 #   d <- build_discards_data(years = 2022:2024)   # a subset
-# =============================================================================
+# ============================================================================#
 
 build_discards_data <- function(
     foss_path       = "FOSS_raw_2020_2024.csv",

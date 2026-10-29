@@ -1,9 +1,7 @@
 # =============================================================================
 # MRIP pipeline functions
 # -----------------------------------------------------------------------------
-# Same logic as the MRIP section of discards-database-pipeline.R (including the
-# 2026-10-26 TSN overrides), packaged so the app's data build can run it over
-# any year range. Requires foss_functions.R (for build_tsn_lookup()).
+# Same logic as the MRIP section of discards-database-pipeline.R (including the 2026-10-26 TSN overrides), packaged so the app's data build can run it over any year range. Requires foss_functions.R (for build_tsn_lookup()).
 #
 #   mrip_clean  <- clean_mrip(mrip_raw, years = 2020:2024)   # years optional
 #   mrip_lookup <- build_mrip_lookup(MRIP_TSN_key, mrip_clean)
@@ -50,9 +48,7 @@ convert_to_afs_style <- function(x) {
   }, character(1))
 }
 
-# Name -> TSN lookup for MRIP: base lookup, plus AFS-style recovery for names
-# absent from the key's MRIP_NAME, plus manual overrides. Errors if any name
-# still maps to more than one TSN (which would double-count catch).
+# Name -> TSN lookup for MRIP: base lookup, plus AFS-style recovery for names absent from the key's MRIP_NAME, plus manual overrides. Errors if any name still maps to more than one TSN (which would double-count catch).
 build_mrip_lookup <- function(tsn_key, mrip_clean, overrides = mrip_tsn_overrides) {
   base_lookup <- build_tsn_lookup(tsn_key)
 
@@ -96,8 +92,7 @@ map_mrip_region <- function(region) {
   )
 }
 
-# Join to lookup, map regions, collapse to region x TSN x year,
-# add tsn_region_unique for the status join.
+# Join to lookup, map regions, collapse to region x TSN x year, add tsn_region_unique for the status join.
 summarize_mrip <- function(mrip_clean, mrip_lookup) {
   joined <- mrip_clean %>%
     left_join(mrip_lookup, by = c("common_name" = "name_merged"))
@@ -121,7 +116,7 @@ summarize_mrip <- function(mrip_clean, mrip_lookup) {
     )
 }
 
-# Species with no TSN, ranked by catch (the table we used to triage today).
+# Species with no TSN, ranked by catch
 mrip_unmatched_catch <- function(mrip_clean, mrip_lookup) {
   mrip_clean %>%
     left_join(mrip_lookup, by = c("common_name" = "name_merged")) %>%

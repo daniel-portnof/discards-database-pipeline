@@ -1,5 +1,5 @@
 # =============================================================================
-# Stock status functions (as known at the time, any_poor summary)
+# Stock status functions (as known at the time, any_poor summary to flag if poor condition was found in ANY stocks under a species name)
 # -----------------------------------------------------------------------------
 # Function versions of status_as_of.R.
 #
@@ -30,8 +30,7 @@ map_stock_area <- function(x) {
   )
 }
 
-# Every assessment for every stock, with region and tsn_region_unique.
-# One record per stock per assessment year (later assessment_id wins).
+# Every assessment for every stock, with region and tsn_region_unique. One record per stock per assessment year (whatever the later assessment_id is wins).
 build_status_history <- function(stocksmart_raw) {
   status_all <- stocksmart_raw %>%
     clean_names() %>%

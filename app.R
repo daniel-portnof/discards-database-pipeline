@@ -56,8 +56,8 @@ names(region_choices) <- str_to_title(str_replace_all(region_choices, "_", " "))
 all_years <- range(c(mrip$year, foss$year))
 
 status_cols <- c(
-  "Poor condition"        = "#c0392b",
-  "Not in poor condition" = "#2e86c1",
+  "Poor condition"        = "orangered2",
+  "Not in poor condition" = "steelblue",
   "No assessment"         = "grey65"
 )
 
